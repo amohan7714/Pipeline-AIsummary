@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: incidents
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: agent:1.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/incidents
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      JENKINS_URL: ${JENKINS_URL}
+      JENKINS_USER: ${JENKINS_USER}
+      JENKINS_API_TOKEN: ${JENKINS_API_TOKEN}
+      JENKINS_WEBHOOK_SECRET: ${JENKINS_WEBHOOK_SECRET}
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
