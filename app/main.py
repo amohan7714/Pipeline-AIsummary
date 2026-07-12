@@ -133,7 +133,7 @@ async def process_incident(incident_id: uuid.UUID) -> None:
             await db.commit()
             await log_event(db, incident, IncidentStatus.FETCHING_LOG)
 
-            console_log = await fetch_console_log(incident.build_url)
+            console_log = await fetch_console_log(incident.job_name, incident.build_number)
             incident.console_log = console_log
             await db.commit()
 
