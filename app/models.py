@@ -19,6 +19,7 @@ class IncidentStatus(str, enum.Enum):
 
 class Incident(Base):
     __tablename__ = "incidents"
+    __mapper_args__ = {"eager_defaults": True}
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -48,6 +49,7 @@ class IncidentEvent(Base):
     """One row per stage transition. Powers the live timeline in the dashboard."""
 
     __tablename__ = "incident_events"
+    __mapper_args__ = {"eager_defaults": True}
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
