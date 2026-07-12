@@ -2,10 +2,9 @@ pipeline {
     agent any
 
     environment {
-        INCIDENT_API_URL    = 'http://54.173.49.94:8080/webhook/jenkins'
+        INCIDENT_API_URL    = 'http://54.173.49.94:8000/webhook/jenkins'
         WEBHOOK_SECRET       = '2fe931364f4a16f9bcdad4f287880af536a8862a97712fbd151c702a91591c9a'
     }
-
     stages {
         stage('Checkout') {
             steps {
@@ -80,7 +79,7 @@ EOF
                   "build_number": ${BUILD_NUMBER},
                   "build_url": "${BUILD_URL}",
                   "status": "FAILURE",
-                  "branch": "${GIT_BRANCH ?: 'main'}"
+                  "branch": "${env.GIT_BRANCH ?: 'main'}"
                 }'
             """
         }

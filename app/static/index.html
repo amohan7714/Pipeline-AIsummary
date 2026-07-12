@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pipeline Incident Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0a0f1e;
+    --surface: #111a30;
+    --surface-2: #16213d;
+    --border: #22304f;
+    --text: #e7ecf9;
+    --text-dim: #8592b4;
+    --text-faint: #4f5b7d;
+
+    --c-received: #8592b4;
+    --c-fetching: #4c8dff;
+    --c-analyzing: #f5a623;
+    --c-resolved: #2fd98a;
+    --c-failed: #ff5c72;
+
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  *{ box-sizing: border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(76,141,255,0.07), transparent 40%),
+      radial-gradient(circle at 85% 100%, rgba(47,217,138,0.05), transparent 45%);
+    color: var(--text);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a{ color: inherit; }
+
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb{ background: var(--border); border-radius:8px; }
+  ::-webkit-scrollbar-track{ background: transparent; }
+
+  .app{
+    display:grid;
+    grid-template-columns: 380px 1fr;
+    grid-template-rows: 64px 1fr;
+    grid-template-areas:
+      "topbar topbar"
+      "sidebar main";
+    height:100vh;
+  }
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    grid-area: topbar;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(17,26,48,0.6);
+    backdrop-filter: blur(8px);
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-family: var(--font-display);
+    font-weight:700;
+    font-size:16px;
+    letter-spacing: 0.01em;
+  }
+  .brand .mark{
+    width:20px; height:20px;
+    border-radius:5px;
+    background: linear-gradient(135deg, var(--c-fetching), var(--c-resolved));
+    flex-shrink:0;
+  }
+  .brand .sub{
+    font-family: var(--font-body);
+    font-weight:400;
+    font-size:12px;
+    color: var(--text-dim);
+    margin-left:6px;
+  }
+  .live-status{
+    display:flex; align-items:center; gap:8px;
+    font-family: var(--font-mono);
+    font-size:12px;
+    color: var(--text-dim);
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius:20px;
+  }
+  .live-dot{
+    width:7px; height:7px; border-radius:50%;
+    background: var(--c-failed);
+  }
+  .live-status.connected .live-dot{
+    background: var(--c-resolved);
+    box-shadow: 0 0 0 0 rgba(47,217,138,0.6);
+    animation: pulse-dot 2s infinite;
+  }
+  .live-status.connected{ color: var(--text); }
+  @keyframes pulse-dot{
+    0%{ box-shadow: 0 0 0 0 rgba(47,217,138,0.5); }
+    70%{ box-shadow: 0 0 0 7px rgba(47,217,138,0); }
+    100%{ box-shadow: 0 0 0 0 rgba(47,217,138,0); }
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{
+    grid-area: sidebar;
+    border-right: 1px solid var(--border);
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+  }
+  .sidebar-head{
+    padding: 18px 20px 10px;
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight:600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .incident-list{ padding: 0 10px 20px; display:flex; flex-direction:column; gap:6px; }
+
+  .incident-card{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    padding: 12px 12px;
+    border-radius:10px;
+    border: 1px solid transparent;
+    cursor:pointer;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .incident-card:hover{ background: var(--surface); }
+  .incident-card.selected{ background: var(--surface-2); border-color: var(--border); }
+  .incident-card.flash{ animation: flash-in .9s ease; }
+  @keyframes flash-in{
+    0%{ background: rgba(76,141,255,0.18); }
+    100%{ background: transparent; }
+  }
+
+  .status-dot{
+    width:9px; height:9px; border-radius:50%;
+    margin-top:5px; flex-shrink:0;
+  }
+  .status-dot.received{ background: var(--c-received); }
+  .status-dot.fetching_log{ background: var(--c-fetching); box-shadow:0 0 0 3px rgba(76,141,255,0.15); }
+  .status-dot.analyzing{ background: var(--c-analyzing); box-shadow:0 0 0 3px rgba(245,166,35,0.15); }
+  .status-dot.resolved{ background: var(--c-resolved); }
+  .status-dot.failed{ background: var(--c-failed); }
+  .status-dot.spin{ animation: dot-pulse 1.1s ease-in-out infinite; }
+  @keyframes dot-pulse{
+    0%,100%{ transform: scale(1); opacity:1; }
+    50%{ transform: scale(1.5); opacity:0.55; }
+  }
+
+  .incident-card .meta{ flex:1; min-width:0; }
+  .incident-card .job{
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight:500;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .incident-card .row2{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-top:3px;
+  }
+  .incident-card .stage-label{
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: capitalize;
+  }
+  .incident-card .time{
+    font-size: 10px;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+  }
+
+  .empty-sidebar{
+    padding: 40px 24px;
+    color: var(--text-faint);
+    font-size: 13px;
+    text-align:center;
+    line-height:1.6;
+  }
+
+  /* ---------- Main panel ---------- */
+  .main{
+    grid-area: main;
+    overflow-y:auto;
+    padding: 28px 40px 60px;
+  }
+
+  .empty-main{
+    height:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    color: var(--text-faint);
+    gap:8px;
+    text-align:center;
+  }
+  .empty-main .big{
+    font-family: var(--font-display);
+    font-size:20px;
+    color: var(--text-dim);
+  }
+
+  .detail-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    flex-wrap:wrap;
+    gap:16px;
+    margin-bottom: 28px;
+  }
+  .detail-title{
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight:700;
+  }
+  .detail-sub{
+    margin-top:6px;
+    font-family: var(--font-mono);
+    font-size:12.5px;
+    color: var(--text-dim);
+    display:flex; gap:14px; flex-wrap:wrap;
+  }
+  .detail-sub a{ color: var(--c-fetching); text-decoration:none; }
+  .detail-sub a:hover{ text-decoration:underline; }
+
+  .status-pill{
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight:600;
+    padding: 6px 14px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space:nowrap;
+    border:1px solid;
+  }
+  .status-pill.received{ color: var(--c-received); border-color: var(--c-received); background: rgba(133,146,180,0.08); }
+  .status-pill.fetching_log{ color: var(--c-fetching); border-color: var(--c-fetching); background: rgba(76,141,255,0.08); }
+  .status-pill.analyzing{ color: var(--c-analyzing); border-color: var(--c-analyzing); background: rgba(245,166,35,0.08); }
+  .status-pill.resolved{ color: var(--c-resolved); border-color: var(--c-resolved); background: rgba(47,217,138,0.08); }
+  .status-pill.failed{ color: var(--c-failed); border-color: var(--c-failed); background: rgba(255,92,114,0.08); }
+
+  /* ---------- Timeline (signature element) ---------- */
+  .timeline{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 26px 28px;
+    margin-bottom: 24px;
+  }
+  .timeline-title{
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight:600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 22px;
+  }
+  .tl-steps{
+    display:flex;
+    align-items:flex-start;
+    gap: 0;
+  }
+  .tl-step{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    flex:1;
+    position:relative;
+    min-width: 0;
+  }
+  .tl-line{
+    position:absolute;
+    top: 12px;
+    left: 50%;
+    width: 100%;
+    height: 2px;
+    background: var(--border);
+    z-index:0;
+  }
+  .tl-step:first-child .tl-line{ display:none; }
+  .tl-line.done{ background: var(--c-resolved); }
+  .tl-node{
+    width: 26px; height:26px;
+    border-radius:50%;
+    background: var(--surface-2);
+    border: 2px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    z-index:1;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-faint);
+    transition: all .25s ease;
+  }
+  .tl-node.done{ background: var(--c-resolved); border-color: var(--c-resolved); color: #06231a; }
+  .tl-node.active{
+    border-color: var(--c-analyzing);
+    color: var(--c-analyzing);
+    animation: node-glow 1.3s ease-in-out infinite;
+  }
+  .tl-node.error{ background: var(--c-failed); border-color: var(--c-failed); color: #2e0a10; }
+  @keyframes node-glow{
+    0%,100%{ box-shadow: 0 0 0 0 rgba(245,166,35,0.45); }
+    50%{ box-shadow: 0 0 0 8px rgba(245,166,35,0); }
+  }
+  .tl-label{
+    margin-top:10px;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    text-align:center;
+    max-width: 100px;
+    line-height:1.3;
+  }
+  .tl-step.active .tl-label, .tl-step.done .tl-label{ color: var(--text); }
+  .tl-time{
+    margin-top:3px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-faint);
+  }
+
+  /* ---------- Cards ---------- */
+  .card{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 24px;
+    margin-bottom: 20px;
+  }
+  .card-title{
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight:600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 14px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .card-title .swatch{ width:8px; height:8px; border-radius:2px; }
+
+  .kv{ display:flex; flex-direction:column; gap:14px; }
+  .kv .row .k{ font-size:11.5px; color: var(--text-faint); text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px; }
+  .kv .row .v{ font-size: 14px; line-height:1.55; }
+  .kv .row .v.mono{ font-family: var(--font-mono); font-size:13px; color: var(--c-failed); }
+
+  .waiting-note{
+    color: var(--text-faint);
+    font-size: 13px;
+    font-style: italic;
+  }
+
+  .log-toggle{
+    display:flex; justify-content:space-between; align-items:center;
+    cursor:pointer;
+  }
+  .log-toggle .chev{ transition: transform .2s ease; color: var(--text-faint); }
+  .log-toggle.open .chev{ transform: rotate(90deg); }
+  .log-box{
+    display:none;
+    margin-top: 14px;
+    background: #060a16;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    max-height: 420px;
+    overflow-y:auto;
+  }
+  .log-box.open{ display:block; }
+  .log-box pre{
+    margin:0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    color: #b7c4e8;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      <div class="mark"></div>
+      Pipeline Incident Monitor
+      <span class="sub">Jenkins → Groq AI</span>
+    </div>
+    <div class="live-status" id="liveStatus">
+      <div class="live-dot"></div>
+      <span id="liveStatusText">Connecting…</span>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="sidebar-head">History</div>
+    <div class="incident-list" id="incidentList"></div>
+  </div>
+
+  <div class="main" id="main">
+    <div class="empty-main">
+      <div class="big">No incident selected</div>
+      <div>Pick one from the history, or wait — new Jenkins failures show up here automatically.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STAGES = [
+  { key: "received",     label: "Webhook received" },
+  { key: "fetching_log", label: "Fetch console log" },
+  { key: "analyzing",    label: "Analyze (Groq AI)" },
+  { key: "resolved",     label: "Save result" },
+];
+
+let incidents = new Map();   // id -> incident summary object
+let selectedId = null;
+let detailCache = new Map(); // id -> full detail (with events)
+
+const listEl = document.getElementById("incidentList");
+const mainEl = document.getElementById("main");
+const liveEl = document.getElementById("liveStatus");
+const liveTextEl = document.getElementById("liveStatusText");
+
+function timeAgo(iso){
+  const d = new Date(iso);
+  const secs = Math.floor((Date.now() - d.getTime())/1000);
+  if (secs < 5) return "just now";
+  if (secs < 60) return secs + "s ago";
+  const mins = Math.floor(secs/60);
+  if (mins < 60) return mins + "m ago";
+  const hrs = Math.floor(mins/60);
+  if (hrs < 24) return hrs + "h ago";
+  return Math.floor(hrs/24) + "d ago";
+}
+
+function fmtTime(iso){
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+function stageLabel(s){
+  const found = STAGES.find(x => x.key === s);
+  if (found) return found.label;
+  if (s === "failed") return "Failed";
+  return s;
+}
+
+function renderList(){
+  const sorted = [...incidents.values()].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  if (sorted.length === 0){
+    listEl.innerHTML = `<div class="empty-sidebar">No incidents yet.<br/>Trigger a failing Jenkins build to see it land here live.</div>`;
+    return;
+  }
+  listEl.innerHTML = sorted.map(inc => {
+    const spinning = (inc.status === "fetching_log" || inc.status === "analyzing") ? "spin" : "";
+    const selected = inc.id === selectedId ? "selected" : "";
+    return `
+      <div class="incident-card ${selected}" data-id="${inc.id}" onclick="selectIncident('${inc.id}')">
+        <div class="status-dot ${inc.status} ${spinning}"></div>
+        <div class="meta">
+          <div class="job">${inc.job_name} #${inc.build_number}</div>
+          <div class="row2">
+            <span class="stage-label">${stageLabel(inc.status)}</span>
+            <span class="time">${timeAgo(inc.created_at)}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function selectIncident(id){
+  selectedId = id;
+  renderList();
+  await loadDetail(id);
+}
+
+async function loadDetail(id){
+  try{
+    const res = await fetch(`/incidents/${id}`);
+    if (!res.ok) return;
+    const detail = await res.json();
+    detailCache.set(id, detail);
+    if (selectedId === id) renderDetail(detail);
+  }catch(e){ console.error(e); }
+}
+
+function renderDetail(detail){
+  const events = detail.events || [];
+  const eventByStage = {};
+  events.forEach(e => { eventByStage[e.stage] = e; });
+
+  const failedEvent = eventByStage["failed"];
+  const currentStatus = detail.status;
+
+  const stepsHtml = STAGES.map((stage, idx) => {
+    const ev = eventByStage[stage.key];
+    const isDone = !!ev && currentStatus !== stage.key;
+    const isActive = currentStatus === stage.key;
+    const hasError = failedEvent && !ev && currentStatus === "failed" && idx === STAGES.findIndex(s => !eventByStage[s.key]);
+    let nodeClass = "";
+    if (isDone) nodeClass = "done";
+    else if (isActive) nodeClass = "active";
+    else if (currentStatus === "failed" && !ev) nodeClass = "error";
+
+    let stepClass = "";
+    if (isDone) stepClass = "done";
+    if (isActive) stepClass = "active";
+
+    const lineClass = (idx > 0 && (isDone || isActive || eventByStage[STAGES[idx-1].key])) ? "done" : "";
+
+    return `
+      <div class="tl-step ${stepClass}">
+        <div class="tl-line ${lineClass}"></div>
+        <div class="tl-node ${nodeClass}">${isDone ? "✓" : idx+1}</div>
+        <div class="tl-label">${stage.label}</div>
+        <div class="tl-time">${ev ? fmtTime(ev.created_at) : "—"}</div>
+      </div>
+    `;
+  }).join("");
+
+  const summaryCard = detail.summary ? `
+    <div class="card">
+      <div class="card-title"><span class="swatch" style="background:var(--c-resolved)"></span>AI Failure Summary</div>
+      <div class="kv">
+        <div class="row">
+          <div class="k">Summary</div>
+          <div class="v">${escapeHtml(detail.summary)}</div>
+        </div>
+        ${detail.root_cause ? `<div class="row"><div class="k">Root cause</div><div class="v">${escapeHtml(detail.root_cause)}</div></div>` : ""}
+        ${detail.error_message ? `<div class="row"><div class="k">Error message</div><div class="v mono">${escapeHtml(detail.error_message)}</div></div>` : ""}
+      </div>
+    </div>
+  ` : `
+    <div class="card">
+      <div class="card-title"><span class="swatch" style="background:var(--c-analyzing)"></span>AI Failure Summary</div>
+      <div class="waiting-note">${currentStatus === "failed" ? "Analysis did not complete — check the API logs." : "Waiting for Groq to finish analyzing this build…"}</div>
+    </div>
+  `;
+
+  const logCard = `
+    <div class="card">
+      <div class="log-toggle" id="logToggle" onclick="toggleLog()">
+        <div class="card-title" style="margin-bottom:0"><span class="swatch" style="background:var(--c-fetching)"></span>Console Log</div>
+        <span class="chev">▶</span>
+      </div>
+      <div class="log-box" id="logBox">
+        <pre>${detail.console_log ? escapeHtml(detail.console_log) : "Not fetched yet…"}</pre>
+      </div>
+    </div>
+  `;
+
+  mainEl.innerHTML = `
+    <div class="detail-header">
+      <div>
+        <div class="detail-title">${detail.job_name} #${detail.build_number}</div>
+        <div class="detail-sub">
+          <span>${detail.branch || "unknown branch"}</span>
+          <a href="${detail.build_url}" target="_blank" rel="noopener">View in Jenkins ↗</a>
+          <span>created ${fmtTime(detail.created_at)}</span>
+        </div>
+      </div>
+      <div class="status-pill ${detail.status}">${stageLabel(detail.status)}</div>
+    </div>
+
+    <div class="timeline">
+      <div class="timeline-title">Pipeline Progress</div>
+      <div class="tl-steps">${stepsHtml}</div>
+    </div>
+
+    ${summaryCard}
+    ${logCard}
+  `;
+}
+
+function toggleLog(){
+  document.getElementById("logToggle").classList.toggle("open");
+  document.getElementById("logBox").classList.toggle("open");
+}
+
+function escapeHtml(str){
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+async function loadHistory(){
+  const res = await fetch("/incidents");
+  const data = await res.json();
+  data.forEach(inc => incidents.set(inc.id, inc));
+  renderList();
+}
+
+function connectWS(){
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+  ws.onopen = () => {
+    liveEl.classList.add("connected");
+    liveTextEl.textContent = "Live";
+  };
+  ws.onclose = () => {
+    liveEl.classList.remove("connected");
+    liveTextEl.textContent = "Disconnected — retrying…";
+    setTimeout(connectWS, 2000);
+  };
+  ws.onerror = () => ws.close();
+
+  ws.onmessage = (msg) => {
+    const data = JSON.parse(msg.data);
+    if (data.type !== "incident_update") return;
+
+    const inc = data.incident;
+    const isNew = !incidents.has(inc.id);
+    incidents.set(inc.id, inc);
+    renderList();
+
+    // Auto-select brand-new incidents so processing is visible immediately
+    if (isNew && selectedId === null){
+      selectIncident(inc.id);
+    } else if (selectedId === inc.id){
+      loadDetail(inc.id);
+    }
+
+    if (isNew){
+      requestAnimationFrame(() => {
+        const card = document.querySelector(`.incident-card[data-id="${inc.id}"]`);
+        if (card) card.classList.add("flash");
+      });
+    }
+  };
+}
+
+loadHistory();
+connectWS();
+setInterval(renderList, 15000); // keep "x ago" timestamps fresh
+</script>
+
+</body>
+</html>

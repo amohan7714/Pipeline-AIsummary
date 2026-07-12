@@ -31,3 +31,17 @@ class IncidentOut(BaseModel):
     error_message: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class IncidentEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    stage: IncidentStatus
+    message: str
+    created_at: datetime
+
+
+class IncidentDetailOut(IncidentOut):
+    console_log: str | None
+    events: list[IncidentEventOut] = []

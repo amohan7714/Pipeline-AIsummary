@@ -42,3 +42,19 @@ class Incident(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class IncidentEvent(Base):
+    """One row per stage transition. Powers the live timeline in the dashboard."""
+
+    __tablename__ = "incident_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    incident_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+
+    stage: Mapped[IncidentStatus] = mapped_column(Enum(IncidentStatus))
+    message: Mapped[str] = mapped_column(String(500))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
